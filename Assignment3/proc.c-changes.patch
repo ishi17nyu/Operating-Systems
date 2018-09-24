@@ -1,0 +1,142 @@
+From 449d5d1f3449d3cbdbe38d75524fe13914cf879e Mon Sep 17 00:00:00 2001
+From: ishita <iv447@nyu.edu>
+Date: Mon, 20 Nov 2017 17:21:30 -0500
+Subject: [PATCH 2/2] proc.c changes
+
+---
+ proc.c    | 73 ++++++++++++++++-----------------------------------------------
+ sysproc.c |  4 ----
+ 2 files changed, 18 insertions(+), 59 deletions(-)
+
+diff --git a/proc.c b/proc.c
+index 406032e..1c71ecf 100644
+--- a/proc.c
++++ b/proc.c
+@@ -259,53 +259,8 @@ wait(void)
+   }
+ }
+ 
+-//PAGEBREAK: 42
+-// Per-CPU process scheduler.
+-// Each CPU calls scheduler() after setting itself up.
+-// Scheduler never returns.  It loops, doing:
+-//  - choose a process to run
+-//  - swtch to start running that process
+-//  - eventually that process transfers control
+-//      via swtch back to the scheduler.
+-/*void
+-scheduler(void)
+-{
+-  struct proc *p;
+-  int foundproc = 1;
+-
+-  for(;;){
+-    // Enable interrupts on this processor.
+-    sti();
+-
+-    if (!foundproc) hlt();
+-    foundproc = 0;
+-
+-    // Loop over process table looking for process to run.
+-    acquire(&ptable.lock);
+-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+-    
+-      if(p->state != RUNNABLE)
+-        continue;
+-
+-      // Switch to chosen process.  It is the process's job
+-      // to release ptable.lock and then reacquire it
+-      // before jumping back to us.
+-      foundproc = 1;
+-      proc = p;
+-      switchuvm(p);
+-      p->state = RUNNING;
+-      swtch(&cpu->scheduler, proc->context);
+-      switchkvm();
+-
+-      // Process is done running for now.
+-      // It should have changed its p->state before coming back.
+-      proc = 0;
+-    }
+-    release(&ptable.lock);
+-
+-  }
+-}*/
+ 
++//Calculate total number of tickets allocated to processes.
+ int 
+ totaltickets(void) {
+ 	struct proc *p;
+@@ -318,11 +273,18 @@ totaltickets(void) {
+ 	return total;
+ }
+ 
++//PAGEBREAK: 42
++// Per-CPU process scheduler.
++// Each CPU calls scheduler() after setting itself up.
++// Scheduler never returns.  It loops, doing:
++// Implements lottery Scheduling.
++
++
+ void
+ scheduler(void)
+ {
+   struct proc *p;
+-  unsigned long random_num;
++  unsigned long winner;
+   int sum,total_tickets;
+ 
+   for(;;)
+@@ -330,12 +292,12 @@ scheduler(void)
+ 
+          total_tickets = totaltickets();
+ 
+-         random_num = random_at_most(17845);
++         winner = random_at_most(total_tickets);
+ 
+          if(total_tickets > 0)
+-             random_num %= total_tickets;
++             winner %= total_tickets;
+          else
+-             random_num = 0;
++             winner = 0;
+          
+          sum = 0;
+ 
+@@ -344,13 +306,14 @@ scheduler(void)
+          acquire(&ptable.lock);
+          for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+          {
+-				
+-              if(p->state != RUNNABLE)
+-                 continue;
+-              if(p->tickets + sum <= random_num ) {
++		
++              if(p->tickets + sum <= winner ) {
+ 	              sum += p->tickets;
+ 	              continue;
+-                  }
++                  }		
++              if(p->state != RUNNABLE)
++                 continue;
++              
+ 
+               proc = p;
+ 	      switchuvm(p);
+diff --git a/sysproc.c b/sysproc.c
+index 23cac3b..942439f 100644
+--- a/sysproc.c
++++ b/sysproc.c
+@@ -113,9 +113,5 @@ sys_settickets(void) {
+   
+   return 0;
+   
+-  /* int num; */
+-  /* fetchint(p, */
+-
+-  /* return *pid; */
+ }
+ 
+-- 
+1.9.1
+
